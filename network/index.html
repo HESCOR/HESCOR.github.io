@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Project WP Network — University of Cologne</title>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Albert Sans', sans-serif;
+    background: #f7f7f5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  header { text-align: center; margin-bottom: 24px; }
+  header h1 { font-size: 20px; font-weight: 600; color: #005176; letter-spacing: -0.3px; }
+  header p  { font-size: 13px; color: #5f5e5a; margin-top: 4px; }
+  .card {
+    background: #ffffff;
+    border: 0.5px solid #d6d4cc;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 920px;
+    width: 100%;
+    box-shadow: 0 1px 4px rgba(0,81,118,0.06);
+  }
+  svg { display: block; width: 100%; }
+  .topic-pill { cursor: grab; }
+  .topic-pill.dragging { cursor: grabbing; }
+  .wp-node { cursor: pointer; }
+  footer { margin-top: 16px; font-size: 11px; color: #a0a09a; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Research Project — Work Package Network</h1>
+  <p>Drag topic nodes to reposition · Click any node or WP to highlight connections</p>
+</header>
+
+<div class="card">
+<svg id="svg" viewBox="0 0 860 900" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Research project WP network — University of Cologne</title>
+<desc>12 work packages connected by 16 draggable topic nodes, colour-coded by theme, in University of Cologne colours.</desc>
+<g id="edge-layer"></g>
+<g id="topic-layer"></g>
+<g id="wp-layer"></g>
+<g id="ui-layer"></g>
+</svg>
+</div>
+
+<footer>University of Cologne · Research Project Network Visualisation</footer>
+
+<script>
+const ns = 'http://www.w3.org/2000/svg';
+const svgEl = document.getElementById('svg');
+const EL = document.getElementById('edge-layer');
+const TL = document.getElementById('topic-layer');
+const WL = document.getElementById('wp-layer');
+const UI = document.getElementById('ui-layer');
+
+const UNI_BLUE   = '#005176';
+const UNI_TURQ   = '#009dcc';
+const UNI_CORAL  = '#ea564f';
+const BLUE_LIGHT = '#d6eaf3';
+const TURQ_LIGHT = '#d6f2fa';
+const CORAL_LIGHT= '#fde8e7';
+
+const CX = 430, CY = 440, WP_R = 320;
+const WP_DOT_R   = 36;  // doubled from 18
+const WP_HALO_R  = 52;  // doubled from 26
+const WP_FONT    = 20;  // doubled from 10
+const WP_FONT_SM = 18;  // doubled from 9
+const TOPIC_RX   = 62, TOPIC_RY = 18;
+
+const wpLabels = ['WP1','WP2','WP3','WP4','WP5','WP6','WP7','WP8','WP9','WP10','Org.','Tech.'];
+const wpFull   = ['WP1','WP2','WP3','WP4','WP5','WP6','WP7','WP8','WP9','WP10','Organization','Technical Support'];
+
+const wpPos = wpLabels.map((_, i) => {
+  const a = (i / 12) * 2 * Math.PI - Math.PI / 2;
+  return { x: CX + WP_R * Math.cos(a), y: CY + WP_R * Math.sin(a) };
+});
+
+function catColors(cat) {
+  if (cat === 'blue')  return { fill: BLUE_LIGHT,  stroke: UNI_BLUE,  text: UNI_BLUE  };
+  if (cat === 'turq')  return { fill: TURQ_LIGHT,  stroke: UNI_TURQ,  text: '#006f8e' };
+  if (cat === 'coral') return { fill: CORAL_LIGHT, stroke: UNI_CORAL, text: '#b03d38' };
+  return { fill: '#f1efe8', stroke: '#888780', text: '#5f5e5a' };
+}
+
+const topicsData = [
+  { id:'human-sys',  label:'human systems',                  wps:[1,2,3,5,6,7,8,10],      cat:'blue',  x:430, y:255 },
+  { id:'data-integ', label:'data integration',               wps:[2,3,4,5,6,10,11],       cat:'turq',  x:570, y:278 },
+  { id:'modelling',  label:'numerical modelling',            wps:[2,3,4,7,9,11],          cat:'turq',  x:615, y:400 },
+  { id:'env-know',   label:'environmental knowledge',        wps:[1,6,7,8],               cat:'coral', x:270, y:288 },
+  { id:'earth-sys',  label:'earth systems',                  wps:[0,2,4,9,11],            cat:'coral', x:589, y:526 },
+  { id:'vegetation', label:'vegetation',                     wps:[2,6,9,11],              cat:'coral', x:470, y:575 },
+  { id:'demography', label:'demography',                     wps:[6,7,10],                cat:'blue',  x:608, y:322 },
+  { id:'networks',   label:'networks & migration',           wps:[3,6,7],                 cat:'blue',  x:269, y:494 },
+  { id:'education',  label:'education & outreach',           wps:[4,10,11],               cat:'turq',  x:430, y:518 },
+  { id:'cult-evol',  label:'culture/cultural evolution',     wps:[0,1,6,8,10],            cat:'blue',  x:238, y:403 },
+  { id:'uncert',     label:'uncertainties & biases',         wps:[2,5,6,10],              cat:'turq',  x:342, y:348 },
+  { id:'multisp',    label:'multispecies relations',         wps:[1,8],                   cat:'coral', x:237, y:534 },
+  { id:'ml',         label:'machine learning',               wps:[5,11],                  cat:'turq',  x:609, y:486 },
+  { id:'raw-mat',    label:'raw materials',                  wps:[6,7],                   cat:'blue',  x:308, y:578 },
+  { id:'hep',        label:'HEP / human suitability',        wps:[2,6],                   cat:'blue',  x:494, y:636 },
+  { id:'revol',      label:'critical transitions',           wps:[0,8],                   cat:'blue',  x:593, y:607 },
+];
+
+topicsData.forEach(t => {
+  const c = catColors(t.cat);
+  t.fill = c.fill; t.stroke = c.stroke; t.textColor = c.text;
+});
+
+function mkEl(tag, attrs) {
+  const el = document.createElementNS(ns, tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function updateEdgePath(path, wpx, wpy, tx, ty) {
+  const dx = tx - wpx, dy = ty - wpy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist < 1) return;
+  const nx = dx/dist, ny = dy/dist;
+  const x1 = wpx + nx * WP_DOT_R, y1 = wpy + ny * WP_DOT_R;
+  const ex = tx - nx * (TOPIC_RX * Math.abs(Math.cos(Math.atan2(ny,nx))) + 2);
+  const ey = ty - ny * (TOPIC_RY * Math.abs(Math.sin(Math.atan2(ny,nx))) + 2);
+  const mx = (wpx+tx)/2, my = (wpy+ty)/2;
+  path.setAttribute('d',
+    `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${(mx+ny*14).toFixed(1)} ${(my-nx*14).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`
+  );
+}
+
+const allEdges = [];
+const edgesByWp = {};
+const edgesByTopic = {};
+
+topicsData.forEach(t => {
+  edgesByTopic[t.id] = [];
+  t.wps.forEach(wi => {
+    const wp = wpPos[wi];
+    const path = mkEl('path', {
+      fill:'none', stroke: t.stroke, 'stroke-width':'1', opacity:'0.35',
+      class:`edge e-wp${wi} e-topic-${t.id}`
+    });
+    updateEdgePath(path, wp.x, wp.y, t.x, t.y);
+    EL.appendChild(path);
+    const edge = { path, topic:t, wi };
+    allEdges.push(edge);
+    if (!edgesByWp[wi]) edgesByWp[wi] = [];
+    edgesByWp[wi].push(edge);
+    edgesByTopic[t.id].push(edge);
+  });
+});
+
+topicsData.forEach(t => {
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class','topic-pill');
+  g.setAttribute('data-topic', t.id);
+
+  const ell = mkEl('ellipse', {
+    cx:t.x, cy:t.y, rx:TOPIC_RX, ry:TOPIC_RY,
+    fill:t.fill, stroke:t.stroke, 'stroke-width':'1.5'
+  });
+  const txt = mkEl('text', {
+    x:t.x, y:t.y, 'text-anchor':'middle', 'dominant-baseline':'central',
+    'font-family':"'Albert Sans',sans-serif",
+    'font-size':'10', 'font-weight':'500',
+    fill:t.textColor, style:'pointer-events:none'
+  });
+  txt.textContent = t.label;
+  g.appendChild(ell); g.appendChild(txt);
+  TL.appendChild(g);
+
+  let dragStartSVG = null, dragStartPos = null, moved = false;
+
+  function svgPoint(clientX, clientY) {
+    const rect = svgEl.getBoundingClientRect();
+    const vb = svgEl.viewBox.baseVal;
+    return {
+      x: (clientX - rect.left) * (vb.width  / rect.width),
+      y: (clientY - rect.top)  * (vb.height / rect.height)
+    };
+  }
+
+  g.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    moved = false;
+    dragStartSVG = svgPoint(e.clientX, e.clientY);
+    dragStartPos = { x: t.x, y: t.y };
+    g.classList.add('dragging');
+    g.setPointerCapture(e.pointerId);
+  });
+
+  g.addEventListener('pointermove', e => {
+    if (!dragStartSVG) return;
+    const cur = svgPoint(e.clientX, e.clientY);
+    const dx = cur.x - dragStartSVG.x, dy = cur.y - dragStartSVG.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+    if (!moved) return;
+    t.x = Math.max(TOPIC_RX+5, Math.min(855-TOPIC_RX, dragStartPos.x + dx));
+    t.y = Math.max(TOPIC_RY+5, Math.min(830-TOPIC_RY, dragStartPos.y + dy));
+    ell.setAttribute('cx', t.x); ell.setAttribute('cy', t.y);
+    txt.setAttribute('x',  t.x); txt.setAttribute('y',  t.y);
+    edgesByTopic[t.id].forEach(edge => {
+      updateEdgePath(edge.path, wpPos[edge.wi].x, wpPos[edge.wi].y, t.x, t.y);
+    });
+  });
+
+  g.addEventListener('pointerup', e => {
+    if (!dragStartSVG) return;
+    g.classList.remove('dragging');
+    dragStartSVG = null;
+    if (!moved) onTopicClick(t.id);
+  });
+});
+
+const wpEls = {};
+wpPos.forEach((pos, i) => {
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class','wp-node');
+  g.style.cursor = 'pointer';
+  const halo = mkEl('circle', { cx:pos.x, cy:pos.y, r:WP_HALO_R, fill:UNI_BLUE, opacity:'0', class:'wp-halo' });
+  const dot  = mkEl('circle', { cx:pos.x, cy:pos.y, r:WP_DOT_R,  fill:BLUE_LIGHT, stroke:UNI_BLUE, 'stroke-width':'2.5' });
+  const lbl  = mkEl('text', {
+    x:pos.x, y:pos.y, 'text-anchor':'middle', 'dominant-baseline':'central',
+    'font-family':"'Albert Sans',sans-serif",
+    'font-size': wpLabels[i].length > 4 ? WP_FONT_SM : WP_FONT,
+    'font-weight':'600', fill:UNI_BLUE
+  });
+  lbl.textContent = wpLabels[i];
+  g.appendChild(halo); g.appendChild(dot); g.appendChild(lbl);
+  g.addEventListener('click', () => highlightWP(i));
+  g.addEventListener('mouseenter', () => { if (!active) halo.setAttribute('opacity','0.12'); });
+  g.addEventListener('mouseleave', () => { if (!active) halo.setAttribute('opacity','0'); });
+  WL.appendChild(g);
+  wpEls[i] = g;
+});
+
+let active = null;
+
+function resetAll() {
+  allEdges.forEach(({path}) => { path.setAttribute('opacity','0.35'); path.setAttribute('stroke-width','1'); });
+  Object.values(wpEls).forEach(g => { g.style.opacity=''; g.querySelector('.wp-halo').setAttribute('opacity','0'); });
+  TL.querySelectorAll('.topic-pill').forEach(g => g.style.opacity='');
+  clearInfo(); active = null;
+}
+
+function wpIdToIndex(wpId) {
+  if (Number.isInteger(wpId)) return wpId;
+
+  const raw = String(wpId || '').trim();
+  if (!raw) return -1;
+
+  const normalized = raw.toLowerCase().replace(/[\s._-]+/g, '').replace(/^workpackage/, 'wp');
+
+  const labelIndex = wpLabels.findIndex(label =>
+    label.toLowerCase().replace(/[\s._-]+/g, '') === normalized
+  );
+  if (labelIndex !== -1) return labelIndex;
+
+  const fullIndex = wpFull.findIndex(label =>
+    label.toLowerCase().replace(/[\s._-]+/g, '') === normalized
+  );
+  if (fullIndex !== -1) return fullIndex;
+
+  const match = normalized.match(/^(?:wp)?(\d+)$/);
+  if (match) {
+    const idx = Number(match[1]) - 1;
+    if (idx >= 0 && idx < wpLabels.length) return idx;
+  }
+
+  return -1;
+}
+
+function highlightWP(wpId) {
+  const wi = wpIdToIndex(wpId);
+  if (wi < 0 || wi >= wpLabels.length) return;
+
+  if (active === 'wp'+wi) { resetAll(); return; }
+  resetAll(); active = 'wp'+wi;
+  const myEdges = edgesByWp[wi] || [];
+  const connWps = new Set([wi]);
+  const myTopicIds = new Set(myEdges.map(e => e.topic.id));
+  myEdges.forEach(e => e.topic.wps.forEach(w => connWps.add(w)));
+  allEdges.forEach(({path, wi:w, topic}) => {
+    const sharesTopic = myTopicIds.has(topic.id);
+    const direct = w === wi && sharesTopic;
+    const indirect = w !== wi && sharesTopic;
+    path.setAttribute('opacity', direct ? '0.9' : indirect ? '0.25' : '0.04');
+    path.setAttribute('stroke-width', direct ? '2' : indirect ? '1.2' : '1');
+  });
+  Object.values(wpEls).forEach((g, idx) => { g.style.opacity = connWps.has(idx) ? '1' : '0.15'; });
+  TL.querySelectorAll('.topic-pill').forEach(g => {
+    g.style.opacity = myTopicIds.has(g.getAttribute('data-topic')) ? '1' : '0.08';
+  });
+  const names = [...myTopicIds].map(id => topicsData.find(t=>t.id===id).label);
+  showInfo(`${wpFull[wi]} — ${names.join(' · ')}`);
+}
+
+function onTopicClick(tid) {
+  if (active === 'topic'+tid) { resetAll(); return; }
+  resetAll(); active = 'topic'+tid;
+  const myEdges = edgesByTopic[tid] || [];
+  const myWps = new Set(myEdges.map(e => e.wi));
+  allEdges.forEach(({path, topic}) => {
+    const rel = topic.id === tid;
+    path.setAttribute('opacity', rel ? '0.95' : '0.04');
+    if (rel) path.setAttribute('stroke-width','2.2');
+  });
+  Object.values(wpEls).forEach((g, idx) => { g.style.opacity = myWps.has(idx) ? '1' : '0.12'; });
+  TL.querySelectorAll('.topic-pill').forEach(g => {
+    g.style.opacity = g.getAttribute('data-topic') === tid ? '1' : '0.08';
+  });
+  const t = topicsData.find(t=>t.id===tid);
+  showInfo(`"${t.label}" (${t.wps.length} WPs) — ${[...myWps].map(i => wpFull[i]).join(', ')}`);
+}
+
+function showInfo(msg) {
+  clearInfo();
+  const bg = mkEl('rect',{x:'40',y:'845',width:'780',height:'28',rx:'7',
+    fill:'#d6eaf3', stroke:UNI_BLUE, 'stroke-width':'0.5'});
+  const tx = mkEl('text',{x:'430',y:'860','text-anchor':'middle','dominant-baseline':'central',
+    'font-family':"'Albert Sans',sans-serif",'font-size':'11','font-weight':'500',fill:UNI_BLUE});
+  tx.textContent = msg.length > 120 ? msg.slice(0,118)+'…' : msg;
+  UI.appendChild(bg); UI.appendChild(tx);
+}
+
+function clearInfo() { while(UI.firstChild) UI.removeChild(UI.firstChild); }
+
+svgEl.addEventListener('click', e => {
+  if (!e.target.closest('.topic-pill, .wp-node')) resetAll();
+});
+
+// Legend
+const legendItems = [
+  { type:'circle', fill:BLUE_LIGHT,  stroke:UNI_BLUE,  label:'work package'   },
+  { type:'pill',   fill:BLUE_LIGHT,  stroke:UNI_BLUE,  label:'human / social' },
+  { type:'pill',   fill:TURQ_LIGHT,  stroke:UNI_TURQ,  label:'data / methods' },
+  { type:'pill',   fill:CORAL_LIGHT, stroke:UNI_CORAL, label:'environment'    },
+  { type:'pill',   fill:'#f1efe8',   stroke:'#888780', label:'single WP'      },
+];
+let lx = 40;
+legendItems.forEach(item => {
+  const g = mkEl('g',{});
+  if (item.type === 'circle') {
+    g.appendChild(mkEl('circle',{ cx:lx+9, cy:'820', r:'9', fill:item.fill, stroke:item.stroke, 'stroke-width':'1.5' }));
+  } else {
+    g.appendChild(mkEl('ellipse',{ cx:lx+18, cy:'820', rx:'18', ry:'9', fill:item.fill, stroke:item.stroke, 'stroke-width':'1.5' }));
+  }
+  const tx = mkEl('text',{ x: item.type==='circle' ? lx+22 : lx+40, y:'820',
+    'dominant-baseline':'central','font-family':"'Albert Sans',sans-serif",
+    'font-size':'10','font-weight':'500', fill:item.stroke });
+  tx.textContent = item.label;
+  g.appendChild(tx);
+  UI.appendChild(g);
+  lx += item.label.length * 6.5 + (item.type==='circle' ? 36 : 50);
+});
+
+showInfo('Drag topic nodes to reposition · Click any node or WP to highlight connections');
+
+const initialWp = new URLSearchParams(window.location.search).get('wp');
+if (initialWp) highlightWP(initialWp);
+</script>
+
+</body>
+</html>
