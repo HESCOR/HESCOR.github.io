@@ -1575,6 +1575,34 @@ a.hescor-event:focus {
     position: relative;
 }
 
+/* Keep thumbnail rows aligned without cropping images of different proportions. */
+.hescor-preview-image-frame {
+    display: flex;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box;
+    background: transparent;
+}
+
+.hescor-preview-image-frame > a {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+.hescor-preview-image-frame img {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    object-fit: contain;
+}
+
 .news_preview.preview_ctr{
     margin-bottom: 70px;
 }
