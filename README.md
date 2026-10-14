@@ -1,3 +1,5 @@
+[![GitHub Org](https://img.shields.io/badge/GitHub-HESCOR-blue?logo=github&logoColor=white)](https://github.com/HESCOR)
+
 # HESCOR project website archive
 
 This repository hosts the long-term static archive of the HESCOR (Human & Earth System Coupled Research) project website.
